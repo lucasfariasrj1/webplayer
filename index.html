@@ -342,21 +342,21 @@
     }
 
     function parseM3U(rawText) {
-        const lines = rawText.split('\n');
+        const lines = rawText.split(/\r\n|\n|\r/);
 
         for (let i = 0; i < lines.length; i++) {
             const extinf = lines[i]?.trim();
             if (!extinf || !extinf.startsWith('#EXTINF:')) continue;
 
-            const streamUrl = lines[i + 1]?.trim();
-            if (!streamUrl || !/^https?:\/\//i.test(streamUrl)) continue;
+            const streamUrl = findStreamUrlAfter(lines, i + 1);
+            if (!streamUrl) continue;
 
             const title = extinf.split(',').pop()?.trim() || 'Sem título';
             const group = extinf.match(/group-title="([^"]+)"/)?.[1] || 'SEM GRUPO';
 
             let master = 'TV AO VIVO';
-            if (streamUrl.includes('/movie/')) master = 'FILMES';
-            else if (streamUrl.includes('/series/')) master = 'SÉRIES';
+            if (/\/movie\//i.test(streamUrl)) master = 'FILMES';
+            else if (/\/series\//i.test(streamUrl)) master = 'SÉRIES';
 
             if (!db[master][group]) db[master][group] = [];
             db[master][group].push({ title, url: streamUrl });
@@ -366,6 +366,17 @@
             const groups = Object.keys(db[cat]);
             groups.forEach(group => db[cat][group].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR')));
         });
+    }
+
+    function findStreamUrlAfter(lines, startIndex) {
+        for (let j = startIndex; j < lines.length; j++) {
+            const candidate = (lines[j] || '').trim();
+            if (!candidate) continue;
+            if (candidate.startsWith('#')) break;
+            if (/^https?:\/\//i.test(candidate)) return candidate;
+            break;
+        }
+        return '';
     }
 
     function onMasterCategoryChange() {
@@ -424,7 +435,7 @@
     function playVideo(item) {
         const rawUrl = item.url;
         const proxiedUrl = buildProxyUrl(rawUrl);
-        const isHls = /\.m3u8(\?|$)/i.test(rawUrl) || /\.ts(\?|$)/i.test(rawUrl);
+        const isHlsManifest = /\.m3u8(\?|$)/i.test(rawUrl);
 
         detachHls();
 
@@ -433,7 +444,7 @@
 
         const videoElement = player.tech(true)?.el() || document.getElementById('iptv-video_html5_api');
 
-        if (isHls && videoElement && Hls.isSupported() && !canNativeHls(videoElement)) {
+        if (isHlsManifest && videoElement && Hls.isSupported() && !canNativeHls(videoElement)) {
             setStatus('Codec não nativo detectado. Reproduzindo com fallback Hls.js...');
             hlsInstance = new Hls({
                 lowLatencyMode: true,
@@ -469,8 +480,11 @@
 
     function inferMime(url) {
         if (/\.mp4(\?|$)/i.test(url)) return 'video/mp4';
-        if (/\.m3u8(\?|$)/i.test(url) || /\.ts(\?|$)/i.test(url)) return 'application/x-mpegURL';
-        return 'application/x-mpegURL';
+        if (/\.m3u8(\?|$)/i.test(url)) return 'application/x-mpegURL';
+        if (/\.ts(\?|$)/i.test(url)) return 'video/mp2t';
+        if (/\/movie\//i.test(url)) return 'video/mp4';
+        // Em listas Xtream, canais ao vivo frequentemente vêm sem extensão.
+        return 'video/mp2t';
     }
 
     function detachHls() {
