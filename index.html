@@ -1,139 +1,504 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal IPTV Player</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
+    <title>WebPlayer IPTV</title>
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
     <style>
-        :root { --primary: #e50914; --bg: #000; --panel: #181818; }
-        body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* Interface de Login */
-        #login-screen { position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; align-items: center; justify-content: center; }
-        .login-card { background: var(--panel); padding: 30px; border-radius: 12px; width: 320px; border: 1px solid #333; }
-        input, select { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #444; color: white; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: var(--primary); border: none; color: white; font-weight: bold; cursor: pointer; border-radius: 6px; }
+        :root {
+            --bg: #0b0b0b;
+            --panel: #171717;
+            --muted: #9c9c9c;
+            --primary: #e50914;
+            --line: #262626;
+        }
 
-        /* App Layout */
-        #app { display: none; flex: 1; overflow: hidden; }
-        .player-box { flex: 2; background: #000; display: flex; align-items: center; justify-content: center; }
-        .sidebar { width: 350px; background: var(--panel); border-left: 1px solid #222; display: flex; flex-direction: column; }
-        
-        .video-js { width: 100% !important; height: 100% !important; }
-        .list-container { flex: 1; overflow-y: auto; }
-        .list-container li { padding: 12px 15px; border-bottom: 1px solid #252525; cursor: pointer; list-style: none; font-size: 14px; }
-        .list-container li:hover { background: #222; }
-        .list-container li.active { border-left: 4px solid var(--primary); background: #333; color: var(--primary); }
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+            background: var(--bg);
+            color: #fff;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top, #191919 0%, #080808 55%);
+            z-index: 50;
+        }
+
+        .login-card {
+            width: min(420px, 92vw);
+            background: #101010;
+            border: 1px solid #2b2b2b;
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5);
+        }
+
+        .login-card h1 {
+            margin: 0 0 6px;
+            color: var(--primary);
+            text-align: center;
+            font-size: 1.5rem;
+        }
+
+        .login-card p {
+            margin: 0 0 18px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 0.92rem;
+        }
+
+        input, select, button {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid #353535;
+            padding: 12px;
+            background: #080808;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+
+        button {
+            border: none;
+            font-weight: 700;
+            background: var(--primary);
+            cursor: pointer;
+        }
+
+        #app {
+            display: none;
+            height: 100%;
+            width: 100%;
+            gap: 0;
+        }
+
+        .player-column {
+            flex: 1.6;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+            border-right: 1px solid var(--line);
+        }
+
+        .video-wrap {
+            flex: 1;
+            min-height: 220px;
+        }
+
+        .video-js,
+        .video-js video {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        #playing-title {
+            margin: 0;
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            border-top: 1px solid var(--line);
+            color: #f0f0f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sidebar {
+            width: 380px;
+            max-width: 48vw;
+            display: flex;
+            flex-direction: column;
+            background: var(--panel);
+        }
+
+        .filters {
+            padding: 14px;
+            border-bottom: 1px solid var(--line);
+            background: #121212;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .muted { color: var(--muted); font-size: 0.8rem; margin: 0; }
+
+        .list-container {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .channel-item {
+            padding: 10px 14px;
+            border-bottom: 1px solid #202020;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .channel-item:hover { background: #1f1f1f; }
+
+        .channel-item.active {
+            background: #2a2a2a;
+            border-left: 4px solid var(--primary);
+            padding-left: 10px;
+        }
+
+        .badge {
+            font-size: 0.72rem;
+            color: #d3d3d3;
+            border: 1px solid #555;
+            border-radius: 999px;
+            padding: 2px 7px;
+            flex-shrink: 0;
+        }
+
+        #status {
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            color: var(--muted);
+            border-top: 1px solid var(--line);
+            background: #121212;
+        }
+
+        @media (max-width: 768px) {
+            body { overflow: auto; }
+            #app {
+                flex-direction: column;
+                height: auto;
+                min-height: 100dvh;
+            }
+
+            .player-column {
+                position: sticky;
+                top: 0;
+                z-index: 5;
+                min-height: 37vh;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-width: 100%;
+                min-height: 63vh;
+            }
+        }
     </style>
 </head>
 <body>
-
 <div id="login-screen">
     <div class="login-card">
-        <h2 style="color:var(--primary); text-align:center">IPTV PLAYER</h2>
-        <input type="text" id="user" placeholder="Usuário">
-        <input type="password" id="pass" placeholder="Senha">
-        <button onclick="carregarSistema()">ENTRAR</button>
+        <h1>WEBPLAYER IPTV</h1>
+        <p>Entre com usuário e senha para importar sua lista M3U.</p>
+        <input id="user" type="text" placeholder="Usuário">
+        <input id="pass" type="password" placeholder="Senha">
+        <button id="btn-login" type="button">Entrar</button>
     </div>
 </div>
 
 <div id="app">
-    <div class="player-box">
-        <video id="vid" class="video-js vjs-big-play-centered" controls playsinline></video>
-    </div>
-    <div class="sidebar">
-        <div style="padding:15px; background:#000">
-            <select id="main-cat" onchange="filtroMestre()"></select>
-            <select id="sub-cat" onchange="renderizar()"></select>
-            <input type="text" id="busca" placeholder="🔍 Buscar..." oninput="renderizar()">
+    <section class="player-column">
+        <div class="video-wrap">
+            <video id="iptv-video" class="video-js vjs-big-play-centered" controls playsinline preload="auto"></video>
         </div>
-        <div class="list-container" id="lista"></div>
-    </div>
+        <p id="playing-title">Nenhum canal selecionado.</p>
+    </section>
+
+    <aside class="sidebar">
+        <div class="filters">
+            <select id="main-cat"></select>
+            <select id="sub-cat"></select>
+            <input type="text" id="search" placeholder="Buscar canal/filme/série...">
+            <p class="muted" id="counter">0 itens</p>
+        </div>
+        <div class="list-container" id="list-container"></div>
+        <div id="status">Pronto.</div>
+    </aside>
 </div>
 
-<script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+<script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 <script>
-    let db = { "TV AO VIVO": {}, "FILMES": {}, "SÉRIES": {} };
-    let player = videojs('vid');
+    const MASTER = ["TV AO VIVO", "FILMES", "SÉRIES"];
+    const db = { "TV AO VIVO": {}, "FILMES": {}, "SÉRIES": {} };
+    const PAGE_SIZE = 120;
 
-    async function carregarSistema() {
-        const u = document.getElementById('user').value;
-        const p = document.getElementById('pass').value;
-        const url = `proxy.php?url=${encodeURIComponent(`https://ded38.com/get.php?username=${u}&password=${p}&type=m3u_plus&output=ts`)}`;
-        
-        try {
-            const res = await fetch(url);
-            const data = await res.text();
-            if(!data.includes("#EXTM3U")) throw "Erro";
-            
-            parsearM3U(data);
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('app').style.display = 'flex';
-        } catch(e) { alert("Credenciais inválidas."); }
-    }
+    let player;
+    let hlsInstance = null;
+    let filteredItems = [];
+    let renderCursor = 0;
 
-    function parsearM3U(text) {
-        const lines = text.split('\n');
-        lines.forEach((line, i) => {
-            if(line.startsWith('#EXTINF:')) {
-                const link = lines[i+1]?.trim();
-                if(!link || !link.startsWith('http')) return;
+    const el = {
+        loginScreen: document.getElementById('login-screen'),
+        app: document.getElementById('app'),
+        user: document.getElementById('user'),
+        pass: document.getElementById('pass'),
+        loginBtn: document.getElementById('btn-login'),
+        main: document.getElementById('main-cat'),
+        sub: document.getElementById('sub-cat'),
+        search: document.getElementById('search'),
+        list: document.getElementById('list-container'),
+        counter: document.getElementById('counter'),
+        status: document.getElementById('status'),
+        playingTitle: document.getElementById('playing-title')
+    };
 
-                const group = line.match(/group-title="([^"]+)"/)?.[1] || "OUTROS";
-                const name = line.split(',').pop().trim();
+    bootstrap();
 
-                let tipo = "TV AO VIVO";
-                if(link.includes("/movie/")) tipo = "FILMES";
-                else if(link.includes("/series/")) tipo = "SÉRIES";
-
-                if(!db[tipo][group]) db[tipo][group] = [];
-                db[tipo][group].push({ name, link });
+    function bootstrap() {
+        player = videojs('iptv-video', {
+            controls: true,
+            autoplay: false,
+            preload: 'auto',
+            fluid: true,
+            html5: {
+                vhs: { overrideNative: true }
             }
         });
 
-        const main = document.getElementById('main-cat');
-        Object.keys(db).forEach(t => main.innerHTML += `<option value="${t}">${t}</option>`);
-        filtroMestre();
-    }
+        loadSavedCredentials();
+        bindEvents();
 
-    function filtroMestre() {
-        const t = document.getElementById('main-cat').value;
-        const sub = document.getElementById('sub-cat');
-        sub.innerHTML = "";
-        Object.keys(db[t]).sort().forEach(g => sub.innerHTML += `<option value="${g}">${g}</option>`);
-        renderizar();
-    }
-
-    function renderizar() {
-        const t = document.getElementById('main-cat').value;
-        const g = document.getElementById('sub-cat').value;
-        const b = document.getElementById('busca').value.toLowerCase();
-        const container = document.getElementById('lista');
-        container.innerHTML = "";
-
-        if(!db[t][g]) return;
-
-        db[t][g].filter(i => i.name.toLowerCase().includes(b)).slice(0, 50).forEach(item => {
-            const li = document.createElement('li');
-            li.innerText = item.name;
-            li.onclick = () => {
-                document.querySelectorAll('li').forEach(el => el.classList.remove('active'));
-                li.classList.add('active');
-                playVideo(item.link);
-            };
-            container.appendChild(li);
+        MASTER.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.textContent = cat;
+            el.main.appendChild(opt);
         });
     }
 
-    function playVideo(url) {
+    function bindEvents() {
+        el.loginBtn.addEventListener('click', loadSystem);
+        el.main.addEventListener('change', onMasterCategoryChange);
+        el.sub.addEventListener('change', refreshList);
+        el.search.addEventListener('input', refreshList);
+
+        el.list.addEventListener('scroll', () => {
+            const nearBottom = el.list.scrollTop + el.list.clientHeight >= el.list.scrollHeight - 120;
+            if (nearBottom) {
+                appendNextBatch();
+            }
+        });
+    }
+
+    function loadSavedCredentials() {
+        const user = localStorage.getItem('iptv_user') || '';
+        const pass = localStorage.getItem('iptv_pass') || '';
+        el.user.value = user;
+        el.pass.value = pass;
+    }
+
+    async function loadSystem() {
+        const user = el.user.value.trim();
+        const pass = el.pass.value.trim();
+
+        if (!user || !pass) {
+            setStatus('Informe usuário e senha.');
+            return;
+        }
+
+        localStorage.setItem('iptv_user', user);
+        localStorage.setItem('iptv_pass', pass);
+
+        const sourceUrl = `https://ded38.com/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=ts`;
+        const proxyUrl = buildProxyUrl(sourceUrl);
+
+        setStatus('Importando lista M3U via proxy.php...');
+
+        try {
+            const response = await fetch(proxyUrl);
+            const content = await response.text();
+
+            if (!content.includes('#EXTM3U')) {
+                throw new Error('Lista inválida');
+            }
+
+            clearDatabase();
+            parseM3U(content);
+            onMasterCategoryChange();
+
+            el.loginScreen.style.display = 'none';
+            el.app.style.display = 'flex';
+            setStatus('Lista carregada com sucesso.');
+        } catch (error) {
+            console.error(error);
+            setStatus('Falha ao carregar lista. Verifique as credenciais.');
+            alert('Não foi possível importar a lista M3U.');
+        }
+    }
+
+    function clearDatabase() {
+        MASTER.forEach(cat => db[cat] = {});
+    }
+
+    function parseM3U(rawText) {
+        const lines = rawText.split('\n');
+
+        for (let i = 0; i < lines.length; i++) {
+            const extinf = lines[i]?.trim();
+            if (!extinf || !extinf.startsWith('#EXTINF:')) continue;
+
+            const streamUrl = lines[i + 1]?.trim();
+            if (!streamUrl || !/^https?:\/\//i.test(streamUrl)) continue;
+
+            const title = extinf.split(',').pop()?.trim() || 'Sem título';
+            const group = extinf.match(/group-title="([^"]+)"/)?.[1] || 'SEM GRUPO';
+
+            let master = 'TV AO VIVO';
+            if (streamUrl.includes('/movie/')) master = 'FILMES';
+            else if (streamUrl.includes('/series/')) master = 'SÉRIES';
+
+            if (!db[master][group]) db[master][group] = [];
+            db[master][group].push({ title, url: streamUrl });
+        }
+
+        MASTER.forEach(cat => {
+            const groups = Object.keys(db[cat]);
+            groups.forEach(group => db[cat][group].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR')));
+        });
+    }
+
+    function onMasterCategoryChange() {
+        const selectedMaster = el.main.value;
+        const groups = Object.keys(db[selectedMaster] || {}).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+        el.sub.innerHTML = '';
+
+        groups.forEach(group => {
+            const opt = document.createElement('option');
+            opt.value = group;
+            opt.textContent = group;
+            el.sub.appendChild(opt);
+        });
+
+        refreshList();
+    }
+
+    function refreshList() {
+        const master = el.main.value;
+        const group = el.sub.value;
+        const term = el.search.value.trim().toLowerCase();
+
+        const source = db[master]?.[group] || [];
+        filteredItems = source.filter(item => item.title.toLowerCase().includes(term));
+
+        el.list.innerHTML = '';
+        renderCursor = 0;
+        updateCounter(filteredItems.length);
+        appendNextBatch();
+    }
+
+    function appendNextBatch() {
+        if (renderCursor >= filteredItems.length) return;
+
+        const fragment = document.createDocumentFragment();
+        const end = Math.min(renderCursor + PAGE_SIZE, filteredItems.length);
+
+        for (let i = renderCursor; i < end; i++) {
+            const item = filteredItems[i];
+            const row = document.createElement('div');
+            row.className = 'channel-item';
+            row.innerHTML = `<span>${escapeHtml(item.title)}</span><span class="badge">${i + 1}</span>`;
+            row.addEventListener('click', () => {
+                document.querySelectorAll('.channel-item.active').forEach(node => node.classList.remove('active'));
+                row.classList.add('active');
+                playVideo(item);
+            });
+            fragment.appendChild(row);
+        }
+
+        renderCursor = end;
+        el.list.appendChild(fragment);
+    }
+
+    function playVideo(item) {
+        const rawUrl = item.url;
+        const proxiedUrl = buildProxyUrl(rawUrl);
+        const isHls = /\.m3u8(\?|$)/i.test(rawUrl) || /\.ts(\?|$)/i.test(rawUrl);
+
+        detachHls();
+
         player.pause();
-        player.src({ type: 'application/x-mpegURL', src: url });
-        player.load();
-        player.play().catch(e => {
-            console.log("Erro de codec: Tentando fallback HLS...");
-        });
+        player.load(); // limpa buffers e evita "The media could not be loaded"
+
+        const videoElement = player.tech(true)?.el() || document.getElementById('iptv-video_html5_api');
+
+        if (isHls && videoElement && Hls.isSupported() && !canNativeHls(videoElement)) {
+            setStatus('Codec não nativo detectado. Reproduzindo com fallback Hls.js...');
+            hlsInstance = new Hls({
+                lowLatencyMode: true,
+                backBufferLength: 30,
+                maxBufferLength: 60
+            });
+            hlsInstance.loadSource(proxiedUrl);
+            hlsInstance.attachMedia(videoElement);
+            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => player.play().catch(() => {}));
+            hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+                console.warn('Erro HLS', data);
+                setStatus('Erro de reprodução HLS. Tentando motor Video.js...');
+                detachHls();
+                player.src({ src: proxiedUrl, type: 'application/x-mpegURL' });
+                player.load();
+                player.play().catch(() => {});
+            });
+        } else {
+            const type = inferMime(rawUrl);
+            player.src({ src: proxiedUrl, type });
+            player.load();
+            player.play().catch(() => {});
+            setStatus(`Reproduzindo via Video.js (${type}).`);
+        }
+
+        el.playingTitle.textContent = item.title;
+    }
+
+    function canNativeHls(videoElement) {
+        return videoElement.canPlayType('application/vnd.apple.mpegurl') !== '' ||
+            videoElement.canPlayType('application/x-mpegURL') !== '';
+    }
+
+    function inferMime(url) {
+        if (/\.mp4(\?|$)/i.test(url)) return 'video/mp4';
+        if (/\.m3u8(\?|$)/i.test(url) || /\.ts(\?|$)/i.test(url)) return 'application/x-mpegURL';
+        return 'application/x-mpegURL';
+    }
+
+    function detachHls() {
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
+    }
+
+    function buildProxyUrl(streamUrl) {
+        return `proxy.php?url=${encodeURIComponent(streamUrl)}`;
+    }
+
+    function updateCounter(total) {
+        el.counter.textContent = `${total.toLocaleString('pt-BR')} itens`;
+    }
+
+    function setStatus(text) {
+        el.status.textContent = text;
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 </script>
 </body>
