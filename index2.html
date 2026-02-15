@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal IPTV Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
+    <style>
+        :root { --primary: #e50914; --bg: #000; --panel: #181818; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Interface de Login */
+        #login-screen { position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: var(--panel); padding: 30px; border-radius: 12px; width: 320px; border: 1px solid #333; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid #444; color: white; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: var(--primary); border: none; color: white; font-weight: bold; cursor: pointer; border-radius: 6px; }
+
+        /* App Layout */
+        #app { display: none; flex: 1; overflow: hidden; }
+        .player-box { flex: 2; background: #000; display: flex; align-items: center; justify-content: center; }
+        .sidebar { width: 350px; background: var(--panel); border-left: 1px solid #222; display: flex; flex-direction: column; }
+        
+        .video-js { width: 100% !important; height: 100% !important; }
+        .list-container { flex: 1; overflow-y: auto; }
+        .list-container li { padding: 12px 15px; border-bottom: 1px solid #252525; cursor: pointer; list-style: none; font-size: 14px; }
+        .list-container li:hover { background: #222; }
+        .list-container li.active { border-left: 4px solid var(--primary); background: #333; color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="login-card">
+        <h2 style="color:var(--primary); text-align:center">IPTV PLAYER</h2>
+        <input type="text" id="user" placeholder="Usuário">
+        <input type="password" id="pass" placeholder="Senha">
+        <button onclick="carregarSistema()">ENTRAR</button>
+    </div>
+</div>
+
+<div id="app">
+    <div class="player-box">
+        <video id="vid" class="video-js vjs-big-play-centered" controls playsinline></video>
+    </div>
+    <div class="sidebar">
+        <div style="padding:15px; background:#000">
+            <select id="main-cat" onchange="filtroMestre()"></select>
+            <select id="sub-cat" onchange="renderizar()"></select>
+            <input type="text" id="busca" placeholder="🔍 Buscar..." oninput="renderizar()">
+        </div>
+        <div class="list-container" id="lista"></div>
+    </div>
+</div>
+
+<script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+<script>
+    let db = { "TV AO VIVO": {}, "FILMES": {}, "SÉRIES": {} };
+    let player = videojs('vid');
+
+    async function carregarSistema() {
+        const u = document.getElementById('user').value;
+        const p = document.getElementById('pass').value;
+        const url = `proxy.php?url=${encodeURIComponent(`https://ded38.com/get.php?username=${u}&password=${p}&type=m3u_plus&output=ts`)}`;
+        
+        try {
+            const res = await fetch(url);
+            const data = await res.text();
+            if(!data.includes("#EXTM3U")) throw "Erro";
+            
+            parsearM3U(data);
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app').style.display = 'flex';
+        } catch(e) { alert("Credenciais inválidas."); }
+    }
+
+    function parsearM3U(text) {
+        const lines = text.split('\n');
+        lines.forEach((line, i) => {
+            if(line.startsWith('#EXTINF:')) {
+                const link = lines[i+1]?.trim();
+                if(!link || !link.startsWith('http')) return;
+
+                const group = line.match(/group-title="([^"]+)"/)?.[1] || "OUTROS";
+                const name = line.split(',').pop().trim();
+
+                let tipo = "TV AO VIVO";
+                if(link.includes("/movie/")) tipo = "FILMES";
+                else if(link.includes("/series/")) tipo = "SÉRIES";
+
+                if(!db[tipo][group]) db[tipo][group] = [];
+                db[tipo][group].push({ name, link });
+            }
+        });
+
+        const main = document.getElementById('main-cat');
+        Object.keys(db).forEach(t => main.innerHTML += `<option value="${t}">${t}</option>`);
+        filtroMestre();
+    }
+
+    function filtroMestre() {
+        const t = document.getElementById('main-cat').value;
+        const sub = document.getElementById('sub-cat');
+        sub.innerHTML = "";
+        Object.keys(db[t]).sort().forEach(g => sub.innerHTML += `<option value="${g}">${g}</option>`);
+        renderizar();
+    }
+
+    function renderizar() {
+        const t = document.getElementById('main-cat').value;
+        const g = document.getElementById('sub-cat').value;
+        const b = document.getElementById('busca').value.toLowerCase();
+        const container = document.getElementById('lista');
+        container.innerHTML = "";
+
+        if(!db[t][g]) return;
+
+        db[t][g].filter(i => i.name.toLowerCase().includes(b)).slice(0, 50).forEach(item => {
+            const li = document.createElement('li');
+            li.innerText = item.name;
+            li.onclick = () => {
+                document.querySelectorAll('li').forEach(el => el.classList.remove('active'));
+                li.classList.add('active');
+                playVideo(item.link);
+            };
+            container.appendChild(li);
+        });
+    }
+
+    function playVideo(url) {
+        player.pause();
+        player.src({ type: 'application/x-mpegURL', src: url });
+        player.load();
+        player.play().catch(e => {
+            console.log("Erro de codec: Tentando fallback HLS...");
+        });
+    }
+</script>
+</body>
+</html>
